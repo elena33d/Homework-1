@@ -6,16 +6,14 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Глобальна валідація
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: false,
+      forbidNonWhitelisted: true,
     }),
   );
 
-  // Налаштування Swagger
   const config = new DocumentBuilder()
     .setTitle('Cinema API')
     .setDescription('API для керування кінотеатром')
