@@ -1,0 +1,308 @@
+@host = http://localhost:3000
+@missingId = 00000000-0000-4000-8000-000000000000
+@futureStart = 2030-06-15T18:00:00.000Z
+@futureDay = 2030-06-15
+
+################ FILMS ################
+
+### Create film
+# @name createFilm
+POST {{host}}/films
+Content-Type: application/json
+
+{ "title": "Interstellar", "durationMinutes": 169, "releaseYear": 2014 }
+
+@filmId = {{createFilm.response.body.id}}
+
+### Create film (second, used for deletion later)
+# @name createFilm2
+POST {{host}}/films
+Content-Type: application/json
+
+{ "title": "Dune", "durationMinutes": 155, "releaseYear": 2021 }
+
+@filmId2 = {{createFilm2.response.body.id}}
+
+### [400] Create film: missing field
+POST {{host}}/films
+Content-Type: application/json
+
+{ "title": "No duration", "releaseYear": 2020 }
+
+### [400] Create film: wrong type
+POST {{host}}/films
+Content-Type: application/json
+
+{ "title": "Bad", "durationMinutes": "long", "releaseYear": 2020 }
+
+### List films
+GET {{host}}/films
+
+### Get film
+GET {{host}}/films/{{filmId}}
+
+### [404] Get film: not found
+GET {{host}}/films/{{missingId}}
+
+### Update film
+PATCH {{host}}/films/{{filmId}}
+Content-Type: application/json
+
+{ "title": "Interstellar (IMAX)" }
+
+### [400] Update film: wrong type
+PATCH {{host}}/films/{{filmId}}
+Content-Type: application/json
+
+{ "durationMinutes": "abc" }
+
+### [404] Update film: not found
+PATCH {{host}}/films/{{missingId}}
+Content-Type: application/json
+
+{ "title": "Ghost" }
+
+################ HALLS ################
+
+### Create hall (3 rows x 5 seats)
+# @name createHall
+POST {{host}}/halls
+Content-Type: application/json
+
+{ "name": "Hall 1", "rows": 3, "seatsPerRow": 5 }
+
+@hallId = {{createHall.response.body.id}}
+
+### Create hall (second, used for deletion later)
+# @name createHall2
+POST {{host}}/halls
+Content-Type: application/json
+
+{ "name": "Hall 2", "rows": 2, "seatsPerRow": 4 }
+
+@hallId2 = {{createHall2.response.body.id}}
+
+### [409] Create hall: duplicate name
+POST {{host}}/halls
+Content-Type: application/json
+
+{ "name": "Hall 1", "rows": 3, "seatsPerRow": 5 }
+
+### [400] Create hall: missing field
+POST {{host}}/halls
+Content-Type: application/json
+
+{ "name": "Hall X", "rows": 3 }
+
+### [400] Create hall: wrong type
+POST {{host}}/halls
+Content-Type: application/json
+
+{ "name": "Hall X", "rows": "three", "seatsPerRow": 5 }
+
+### [400] Create hall: not a positive integer
+POST {{host}}/halls
+Content-Type: application/json
+
+{ "name": "Hall X", "rows": 0, "seatsPerRow": 2.5 }
+
+### List halls
+GET {{host}}/halls
+
+### Get hall with seats (15 items)
+GET {{host}}/halls/{{hallId}}
+
+### [404] Get hall: not found
+GET {{host}}/halls/{{missingId}}
+
+################ SHOWINGS ################
+
+### Create showing
+# @name createShowing
+POST {{host}}/showings
+Content-Type: application/json
+
+{ "filmId": "{{filmId}}", "hallId": "{{hallId}}", "startsAt": "{{futureStart}}", "price": 12500 }
+
+@showingId = {{createShowing.response.body.id}}
+
+### Create showing (same time, other film/hall: checks sorting by id)
+POST {{host}}/showings
+Content-Type: application/json
+
+{ "filmId": "{{filmId2}}", "hallId": "{{hallId2}}", "startsAt": "{{futureStart}}", "price": 9000 }
+
+### [400] Create showing: film not found
+POST {{host}}/showings
+Content-Type: application/json
+
+{ "filmId": "{{missingId}}", "hallId": "{{hallId}}", "startsAt": "{{futureStart}}", "price": 12500 }
+
+### [400] Create showing: hall not found
+POST {{host}}/showings
+Content-Type: application/json
+
+{ "filmId": "{{filmId}}", "hallId": "{{missingId}}", "startsAt": "{{futureStart}}", "price": 12500 }
+
+### [400] Create showing: startsAt is not ISO 8601
+POST {{host}}/showings
+Content-Type: application/json
+
+{ "filmId": "{{filmId}}", "hallId": "{{hallId}}", "startsAt": "tomorrow evening", "price": 12500 }
+
+### [400] Create showing: startsAt in the past
+POST {{host}}/showings
+Content-Type: application/json
+
+{ "filmId": "{{filmId}}", "hallId": "{{hallId}}", "startsAt": "2000-01-01T10:00:00.000Z", "price": 12500 }
+
+### [400] Create showing: price is not a positive integer
+POST {{host}}/showings
+Content-Type: application/json
+
+{ "filmId": "{{filmId}}", "hallId": "{{hallId}}", "startsAt": "{{futureStart}}", "price": 125.5 }
+
+### List showings
+GET {{host}}/showings
+
+### List showings by film
+GET {{host}}/showings?filmId={{filmId}}
+
+### List showings by date
+GET {{host}}/showings?date={{futureDay}}
+
+### List showings by film and date
+GET {{host}}/showings?filmId={{filmId}}&date={{futureDay}}
+
+### [400] List showings: bad date format
+GET {{host}}/showings?date=15-06-2030
+
+### Get showing
+GET {{host}}/showings/{{showingId}}
+
+### [404] Get showing: not found
+GET {{host}}/showings/{{missingId}}
+
+### Seats of showing (all free)
+GET {{host}}/showings/{{showingId}}/seats
+
+### [404] Seats: showing not found
+GET {{host}}/showings/{{missingId}}/seats
+
+################ BOOKINGS ################
+
+### Book seats
+# @name createBooking
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 1, "seat": 1 }, { "row": 1, "seat": 2 } ] }
+
+@bookingId = {{createBooking.response.body.id}}
+
+### [404] Book: showing not found
+POST {{host}}/showings/{{missingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 1, "seat": 1 } ] }
+
+### [400] Book: empty seats
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [] }
+
+### [400] Book: seat without a number
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 1 } ] }
+
+### [400] Book: duplicate seat in the request
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 2, "seat": 1 }, { "row": 2, "seat": 1 } ] }
+
+### [400] Book: row exceeds hall
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 4, "seat": 1 } ] }
+
+### [400] Book: seat exceeds hall
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 1, "seat": 6 } ] }
+
+### [400] Book: non-positive number
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 0, "seat": 1 } ] }
+
+### [409] Book: one seat already taken (row 3 seat 3 must stay free)
+POST {{host}}/showings/{{showingId}}/bookings
+Content-Type: application/json
+
+{ "seats": [ { "row": 3, "seat": 3 }, { "row": 1, "seat": 2 } ] }
+
+### Seats after booking (1/1 and 1/2 booked, 3/3 still free)
+GET {{host}}/showings/{{showingId}}/seats
+
+### List all bookings
+GET {{host}}/bookings
+
+### List bookings of showing
+GET {{host}}/showings/{{showingId}}/bookings
+
+### [404] List bookings: showing not found
+GET {{host}}/showings/{{missingId}}/bookings
+
+################ DELETION ################
+
+### [409] Delete film used by a showing
+DELETE {{host}}/films/{{filmId}}
+
+### [409] Delete hall used by a showing
+DELETE {{host}}/halls/{{hallId}}
+
+### Cancel booking
+DELETE {{host}}/bookings/{{bookingId}}
+
+### [404] Cancel booking: not found
+DELETE {{host}}/bookings/{{missingId}}
+
+### Seats after cancellation (all free again)
+GET {{host}}/showings/{{showingId}}/seats
+
+### Hall 3 without showings (to delete)
+# @name createHall3
+POST {{host}}/halls
+Content-Type: application/json
+
+{ "name": "Hall 3", "rows": 1, "seatsPerRow": 1 }
+
+@hallId3 = {{createHall3.response.body.id}}
+
+### Film without showings (to delete)
+# @name createFilm3
+POST {{host}}/films
+Content-Type: application/json
+
+{ "title": "Temp film", "durationMinutes": 90, "releaseYear": 2000 }
+
+@filmId3 = {{createFilm3.response.body.id}}
+
+### Delete film
+DELETE {{host}}/films/{{filmId3}}
+
+### [404] Delete film: not found
+DELETE {{host}}/films/{{filmId3}}
+
+### Delete hall
+DELETE {{host}}/halls/{{hallId3}}
+
+### [404] Delete hall: not found
+DELETE {{host}}/halls/{{hallId3}}

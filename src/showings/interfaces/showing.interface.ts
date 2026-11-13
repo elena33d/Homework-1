@@ -6,10 +6,9 @@ export interface Showing {
   price: number;
 }
 
+/** Showing as returned to clients: film and hall names instead of ids */
 export interface ShowingWithDetails {
   id: string;
-  filmId: string;
-  hallId: string;
   filmTitle: string;
   hallName: string;
   startsAt: string;

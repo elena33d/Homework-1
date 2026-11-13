@@ -1,137 +1,125 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
-
 import { randomUUID } from 'node:crypto';
 
 import { FilmsService } from '../films/films.service.js';
 import { HallsService } from '../halls/halls.service.js';
-
-import { Showing } from './interfaces/showing.interface.js';
 import { CreateShowingDto } from './dto/create-showing.dto.js';
+import {
+  Showing,
+  ShowingSeat,
+  ShowingWithDetails,
+} from './interfaces/showing.interface.js';
+
+type BookedSeatsProvider = (
+  showingId: string,
+) => Array<{ row: number; seat: number }>;
 
 @Injectable()
 export class ShowingsService {
   private showings: Showing[] = [];
+  private bookedSeatsProviders: BookedSeatsProvider[] = [];
 
   constructor(
     private readonly filmsService: FilmsService,
     private readonly hallsService: HallsService,
-  ) {}
+  ) {
+    // films and halls cannot be deleted while a showing references them
+    this.filmsService.registerUsageCheck((filmId) =>
+      this.showings.some((s) => s.filmId === filmId),
+    );
+    this.hallsService.registerUsageCheck((hallId) =>
+      this.showings.some((s) => s.hallId === hallId),
+    );
+  }
+
+  /** Bookings module registers a source of booked seats for a showing */
+  registerBookedSeatsProvider(provider: BookedSeatsProvider): void {
+    this.bookedSeatsProviders.push(provider);
+  }
 
   create(dto: CreateShowingDto): Showing {
-    // Перевіряємо існування фільму
-    try {
-      this.filmsService.findOne(dto.filmId);
-    } catch {
-      throw new BadRequestException(
-        `Film with ID ${dto.filmId} not found`,
-      );
+    if (!this.filmsService.exists(dto.filmId)) {
+      throw new BadRequestException(`Film with id ${dto.filmId} not found`);
+    }
+    if (!this.hallsService.exists(dto.hallId)) {
+      throw new BadRequestException(`Hall with id ${dto.hallId} not found`);
     }
 
-    // Перевіряємо існування залу
-    try {
-      this.hallsService.findOne(dto.hallId);
-    } catch {
-      throw new BadRequestException(
-        `Hall with ID ${dto.hallId} not found`,
-      );
+    const startTime = new Date(dto.startsAt).getTime();
+    if (Number.isNaN(startTime)) {
+      throw new BadRequestException('startsAt must be a valid ISO 8601 date');
     }
-
-    // Перевіряємо дату
-    const startDate = new Date(dto.startsAt);
-
-    if (Number.isNaN(startDate.getTime())) {
-      throw new BadRequestException(
-        'startsAt must be a valid ISO 8601 date',
-      );
-    }
-
-    if (startDate.getTime() < Date.now()) {
-      throw new BadRequestException(
-        'Showing cannot start in the past',
-      );
+    if (startTime <= Date.now()) {
+      throw new BadRequestException('startsAt must not be in the past');
     }
 
     const showing: Showing = {
       id: randomUUID(),
-      ...dto,
+      filmId: dto.filmId,
+      hallId: dto.hallId,
+      startsAt: dto.startsAt,
+      price: dto.price,
     };
-
     this.showings.push(showing);
-
     return showing;
   }
 
-  findAll(filmId?: string, date?: string) {
-    let result = [...this.showings];
-
-    if (filmId) {
-      result = result.filter(
-        (showing) => showing.filmId === filmId,
-      );
-    }
-
-    if (date) {
-      result = result.filter(
-        (showing) => showing.startsAt.slice(0, 10) === date,
-      );
-    }
-
-    result.sort((a, b) => {
-      const timeDifference =
-        new Date(a.startsAt).getTime() -
-        new Date(b.startsAt).getTime();
-
-      if (timeDifference !== 0) {
-        return timeDifference;
-      }
-
-      return a.id.localeCompare(b.id);
-    });
-
-    return result.map((showing) => {
-      const film = this.filmsService.findOne(showing.filmId);
-      const hall = this.hallsService.findOne(showing.hallId);
-
-      return {
-        ...showing,
-        filmTitle: film.title,
-        hallName: hall.name,
-      };
-    });
+  findAll(filmId?: string, date?: string): ShowingWithDetails[] {
+    return this.showings
+      .filter((s) => !filmId || s.filmId === filmId)
+      .filter(
+        (s) =>
+          !date || new Date(s.startsAt).toISOString().slice(0, 10) === date,
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||
+          a.id.localeCompare(b.id),
+      )
+      .map((s) => this.withDetails(s));
   }
 
-  findOne(id: string) {
-    const showing = this.showings.find(
-      (item) => item.id === id,
-    );
+  findOne(id: string): ShowingWithDetails {
+    return this.withDetails(this.getEntity(id));
+  }
 
+  /** Raw showing (with filmId/hallId) for use by other services */
+  getEntity(id: string): Showing {
+    const showing = this.showings.find((s) => s.id === id);
     if (!showing) {
       throw new NotFoundException('Showing not found');
     }
+    return showing;
+  }
 
-    const film = this.filmsService.findOne(showing.filmId);
+  getSeats(id: string): ShowingSeat[] {
+    const showing = this.getEntity(id);
     const hall = this.hallsService.findOne(showing.hallId);
 
+    const booked = new Set(
+      this.bookedSeatsProviders
+        .flatMap((provider) => provider(id))
+        .map((s) => `${s.row}:${s.seat}`),
+    );
+
+    return hall.seats.map((s) => ({
+      row: s.row,
+      seat: s.seat,
+      isBooked: booked.has(`${s.row}:${s.seat}`),
+    }));
+  }
+
+  private withDetails(showing: Showing): ShowingWithDetails {
     return {
-      ...showing,
-      filmTitle: film.title,
-      hallName: hall.name,
+      id: showing.id,
+      filmTitle: this.filmsService.findOne(showing.filmId).title,
+      hallName: this.hallsService.findOne(showing.hallId).name,
+      startsAt: showing.startsAt,
+      price: showing.price,
     };
-  }
-
-  findByFilmId(filmId: string): Showing[] {
-    return this.showings.filter(
-      (showing) => showing.filmId === filmId,
-    );
-  }
-
-  findByHallId(hallId: string): Showing[] {
-    return this.showings.filter(
-      (showing) => showing.hallId === hallId,
-    );
   }
 }

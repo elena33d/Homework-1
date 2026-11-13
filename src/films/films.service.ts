@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,15 @@ import { UpdateFilmDto } from './dto/update-film.dto.js';
 @Injectable()
 export class FilmsService {
   private films: Film[] = [];
+  private usageChecks: Array<(filmId: string) => boolean> = [];
+
+  /**
+   * Other modules (showings) register a check telling whether a film is still
+   * referenced. This keeps films -> showings dependency out of the module graph.
+   */
+  registerUsageCheck(check: (filmId: string) => boolean): void {
+    this.usageChecks.push(check);
+  }
 
   create(createFilmDto: CreateFilmDto): Film {
     const film: Film = {
@@ -26,6 +36,10 @@ export class FilmsService {
 
   findAll(): Film[] {
     return this.films;
+  }
+
+  exists(id: string): boolean {
+    return this.films.some((film) => film.id === id);
   }
 
   findOne(id: string): Film {
@@ -51,6 +65,11 @@ export class FilmsService {
 
     if (index === -1) {
       throw new NotFoundException('Film not found');
+    }
+
+    const film = this.films[index];
+    if (this.usageChecks.some((check) => check(film.id))) {
+      throw new ConflictException('Film is used in existing showings');
     }
 
     this.films.splice(index, 1);

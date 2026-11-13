@@ -1,15 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsInt,
-  IsNotEmpty,
-  IsString,
-  Min,
-} from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, Min } from 'class-validator';
 
 export class CreateHallDto {
   @ApiProperty({
     example: 'Зал №1',
-    description: 'Название зала',
+    description: 'Hall name (unique)',
   })
   @IsString()
   @IsNotEmpty()
@@ -17,7 +12,7 @@ export class CreateHallDto {
 
   @ApiProperty({
     example: 5,
-    description: 'Количество рядов',
+    description: 'Number of rows',
     minimum: 1,
   })
   @IsInt()
@@ -26,7 +21,7 @@ export class CreateHallDto {
 
   @ApiProperty({
     example: 10,
-    description: 'Количество мест в каждом ряду',
+    description: 'Number of seats in each row',
     minimum: 1,
   })
   @IsInt()

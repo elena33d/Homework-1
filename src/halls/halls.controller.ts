@@ -56,8 +56,8 @@ export class HallsController {
 
   @Delete(':id')
   @ApiConflictResponse({
-  description: 'Hall is used in existing showings',
-})
+    description: 'Hall is used in existing showings',
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a hall' })
   @ApiNoContentResponse({ description: 'Hall deleted successfully' })
